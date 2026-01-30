@@ -267,9 +267,19 @@ async function fetchMoviePosters(movieId) {
     const data = await response.json();
     
     if (data.posters?.length > 0) {
-      // Sort by vote count (popularity) and get up to 24 posters
+      // Prioritize English posters, then by popularity
       const sortedPosters = data.posters
-        .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
+        .sort((a, b) => {
+          // English first (en or null which is often English)
+          const aIsEnglish = a.iso_639_1 === 'en' || a.iso_639_1 === null;
+          const bIsEnglish = b.iso_639_1 === 'en' || b.iso_639_1 === null;
+          
+          if (aIsEnglish && !bIsEnglish) return -1;
+          if (!aIsEnglish && bIsEnglish) return 1;
+          
+          // Then by vote count (popularity)
+          return (b.vote_count || 0) - (a.vote_count || 0);
+        })
         .slice(0, 24)
         .map(p => getPosterUrl(p.file_path))
         .filter(url => url !== null);
