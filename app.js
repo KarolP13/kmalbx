@@ -267,7 +267,7 @@ async function fetchMoviePosters(movieId) {
     const data = await response.json();
     
     if (data.posters?.length > 0) {
-      // Prioritize English posters, then by popularity
+      // Return poster objects with language info
       const sortedPosters = data.posters
         .sort((a, b) => {
           // English first (en or null which is often English)
@@ -280,9 +280,13 @@ async function fetchMoviePosters(movieId) {
           // Then by vote count (popularity)
           return (b.vote_count || 0) - (a.vote_count || 0);
         })
-        .slice(0, 24)
-        .map(p => getPosterUrl(p.file_path))
-        .filter(url => url !== null);
+        .slice(0, 30)
+        .map(p => ({
+          url: getPosterUrl(p.file_path),
+          lang: p.iso_639_1 || 'en',
+          isEnglish: p.iso_639_1 === 'en' || p.iso_639_1 === null
+        }))
+        .filter(p => p.url !== null);
       
       return sortedPosters;
     }
@@ -291,6 +295,14 @@ async function fetchMoviePosters(movieId) {
     console.error('Error fetching posters:', error);
     return [];
   }
+}
+
+// Helper to get just URLs from poster objects (for backward compatibility)
+function getPosterUrls(posterObjects) {
+  if (!posterObjects || posterObjects.length === 0) return [];
+  // Handle both old format (array of strings) and new format (array of objects)
+  if (typeof posterObjects[0] === 'string') return posterObjects;
+  return posterObjects.map(p => p.url);
 }
 
 function getPosterUrl(posterPath) {
@@ -356,6 +368,18 @@ function createMovieCard(movie, index) {
 function openPosterPicker(movie) {
   closePosterPicker();
   
+  // Normalize posters to object format
+  const posters = movie.allPosters.map(p => {
+    if (typeof p === 'string') {
+      return { url: p, lang: 'en', isEnglish: true };
+    }
+    return p;
+  });
+  
+  const englishPosters = posters.filter(p => p.isEnglish);
+  const intlPosters = posters.filter(p => !p.isEnglish);
+  const hasIntl = intlPosters.length > 0;
+  
   const picker = document.createElement('div');
   picker.className = 'poster-picker-modal';
   picker.innerHTML = `
@@ -364,24 +388,69 @@ function openPosterPicker(movie) {
         <h3>Choose poster</h3>
         <button class="poster-picker-close">×</button>
       </div>
-      <div class="poster-picker-grid">
-        ${movie.allPosters.map((url, index) => `
-          <div class="poster-option ${url === movie.posterUrl ? 'selected' : ''}" data-url="${url}">
-            <img src="${url}" alt="Poster ${index + 1}" crossorigin="anonymous" />
-            ${url === movie.posterUrl ? '<span class="current-badge">Current</span>' : ''}
-          </div>
-        `).join('')}
+      ${hasIntl ? `
+        <div class="poster-filter-tabs">
+          <button class="poster-filter-btn active" data-filter="english">
+            🇺🇸 English (${englishPosters.length})
+          </button>
+          <button class="poster-filter-btn" data-filter="international">
+            🌍 International (${intlPosters.length})
+          </button>
+        </div>
+      ` : ''}
+      <div class="poster-picker-grid" id="poster-grid">
+        ${renderPosterOptions(englishPosters, movie.posterUrl)}
       </div>
     </div>
   `;
   
   document.body.appendChild(picker);
   
+  // Filter tab switching
+  if (hasIntl) {
+    picker.querySelectorAll('.poster-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        picker.querySelectorAll('.poster-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        const filter = btn.dataset.filter;
+        const grid = picker.querySelector('#poster-grid');
+        const displayPosters = filter === 'english' ? englishPosters : intlPosters;
+        grid.innerHTML = renderPosterOptions(displayPosters, movie.posterUrl);
+        
+        // Re-attach click handlers
+        attachPosterClickHandlers(picker, movie);
+      });
+    });
+  }
+  
+  // Close handlers
   picker.querySelector('.poster-picker-close').addEventListener('click', closePosterPicker);
   picker.addEventListener('click', (e) => {
     if (e.target === picker) closePosterPicker();
   });
   
+  // Poster selection
+  attachPosterClickHandlers(picker, movie);
+  
+  document.addEventListener('keydown', handleEscapeKey);
+}
+
+function renderPosterOptions(posters, currentUrl) {
+  return posters.map((p, index) => {
+    const url = typeof p === 'string' ? p : p.url;
+    const lang = typeof p === 'string' ? '' : (p.lang && p.lang !== 'en' ? p.lang.toUpperCase() : '');
+    return `
+      <div class="poster-option ${url === currentUrl ? 'selected' : ''}" data-url="${url}">
+        <img src="${url}" alt="Poster ${index + 1}" crossorigin="anonymous" loading="lazy" />
+        ${url === currentUrl ? '<span class="current-badge">Current</span>' : ''}
+        ${lang ? `<span class="lang-badge">${lang}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function attachPosterClickHandlers(picker, movie) {
   picker.querySelectorAll('.poster-option').forEach(option => {
     option.addEventListener('click', () => {
       const newUrl = option.dataset.url;
@@ -393,8 +462,6 @@ function openPosterPicker(movie) {
       closePosterPicker();
     });
   });
-  
-  document.addEventListener('keydown', handleEscapeKey);
 }
 
 function closePosterPicker() {
