@@ -1290,13 +1290,26 @@ function parseListUrl(url) {
     }
   }
   
+  // Handle boxd.it short URLs (e.g., https://boxd.it/nVqt6)
+  const shortUrlMatch = url.match(/boxd\.it\/([a-zA-Z0-9]+)/);
+  if (shortUrlMatch) {
+    return { shortCode: shortUrlMatch[1], isShortUrl: true };
+  }
+  
   return null;
 }
 
-async function fetchLetterboxdList(username, listSlug, isWatchlist = false) {
-  const listUrl = isWatchlist 
-    ? `https://letterboxd.com/${username}/watchlist/`
-    : `https://letterboxd.com/${username}/list/${listSlug}/`;
+async function fetchLetterboxdList(listInfo) {
+  let listUrl;
+  
+  // Handle boxd.it short URLs
+  if (listInfo.isShortUrl) {
+    listUrl = `https://boxd.it/${listInfo.shortCode}`;
+  } else if (listInfo.isWatchlist) {
+    listUrl = `https://letterboxd.com/${listInfo.username}/watchlist/`;
+  } else {
+    listUrl = `https://letterboxd.com/${listInfo.username}/list/${listInfo.listSlug}/`;
+  }
   
   updateProgress(10, 'Fetching list...');
   
@@ -1308,7 +1321,13 @@ async function fetchLetterboxdList(username, listSlug, isWatchlist = false) {
       if (response.ok) {
         const html = await response.text();
         if (html && (html.includes('poster-container') || html.includes('film-poster'))) {
-          return { html, username, listSlug };
+          // For short URLs, extract username from the HTML
+          let username = listInfo.username;
+          if (listInfo.isShortUrl) {
+            const usernameMatch = html.match(/letterboxd\.com\/([^\/]+)\/list\//);
+            username = usernameMatch ? usernameMatch[1] : 'unknown';
+          }
+          return { html, username, listSlug: listInfo.listSlug };
         }
       }
     } catch (error) {
@@ -1423,7 +1442,7 @@ async function importFromList() {
   
   const listInfo = parseListUrl(urlInput);
   if (!listInfo) {
-    showError('Invalid list URL. Use format: letterboxd.com/user/list/list-name/');
+    showError('Invalid list URL. Use format: letterboxd.com/user/list/list-name/ or boxd.it/xxxxx');
     return;
   }
   
@@ -1432,7 +1451,7 @@ async function importFromList() {
   importListBtn.innerHTML = '<span class="btn-icon">⏳</span> Importing...';
   
   try {
-    const { html, username } = await fetchLetterboxdList(listInfo.username, listInfo.listSlug, listInfo.isWatchlist);
+    const { html, username } = await fetchLetterboxdList(listInfo);
     
     updateProgress(25, 'Parsing list...');
     const listData = parseListHTML(html, username);
