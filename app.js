@@ -1888,7 +1888,7 @@ completeBtn?.addEventListener('click', () => {
   switchView('grid');
   renderMovieList();
   
-  showSuccess('Summary complete! Ready to download.');
+  showSuccess('Ready to download your graphic!');
 });
 
 // Download PNG
