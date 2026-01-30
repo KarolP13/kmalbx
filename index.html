@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monthly Movie Summary</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Controls Panel (Outside Export Area) -->
+  <div class="controls-panel">
+    <div class="controls-header">
+      <div class="logo">
+        <span class="logo-icon">🎬</span>
+        <span class="logo-text">Monthly Recap</span>
+      </div>
+    </div>
+
+    <div class="date-selectors">
+      <div class="control-group">
+        <label for="month-select">Month</label>
+        <select id="month-select">
+          <option value="0">January</option>
+          <option value="1">February</option>
+          <option value="2">March</option>
+          <option value="3">April</option>
+          <option value="4">May</option>
+          <option value="5">June</option>
+          <option value="6">July</option>
+          <option value="7">August</option>
+          <option value="8">September</option>
+          <option value="9">October</option>
+          <option value="10">November</option>
+          <option value="11">December</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="year-select">Year</label>
+        <select id="year-select">
+          <!-- Populated by JS -->
+        </select>
+      </div>
+    </div>
+
+    <!-- Manual Entry Controls -->
+    <div class="section-label">Add Movie Manually</div>
+    
+    <div class="control-group">
+      <label for="movie-input">Movie Title</label>
+      <input type="text" id="movie-input" placeholder="Enter movie title...">
+    </div>
+
+    <div class="control-group">
+      <label for="year-input">Release Year (optional)</label>
+      <input type="number" id="year-input" placeholder="e.g., 2024" min="1900" max="2030">
+    </div>
+
+    <div class="control-group">
+      <label for="rating-select">Rating</label>
+      <select id="rating-select">
+        <option value="0.5">½</option>
+        <option value="1">★</option>
+        <option value="1.5">★½</option>
+        <option value="2">★★</option>
+        <option value="2.5">★★½</option>
+        <option value="3">★★★</option>
+        <option value="3.5">★★★½</option>
+        <option value="4" selected>★★★★</option>
+        <option value="4.5">★★★★½</option>
+        <option value="5">★★★★★</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label for="watch-date-input">Date Watched</label>
+      <input type="date" id="watch-date-input">
+    </div>
+
+    <div class="control-group checkbox-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="rewatch-checkbox">
+        <span class="checkmark"></span>
+        <span>Rewatch</span>
+      </label>
+    </div>
+
+    <div class="control-group checkbox-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-dates-checkbox" checked>
+        <span class="checkmark"></span>
+        <span>Show dates on posters</span>
+      </label>
+    </div>
+
+    <button id="add-movie-btn" class="btn btn-primary">
+      <span class="btn-icon">+</span> Add Movie
+    </button>
+
+    <div class="divider"></div>
+
+    <!-- Letterboxd Import (Optional) -->
+    <div class="section-label">Or Import from Letterboxd</div>
+    
+    <div class="control-group">
+      <label for="letterboxd-url">Letterboxd Username or URL</label>
+      <input 
+        type="text" 
+        id="letterboxd-url" 
+        placeholder="username or letterboxd.com/username/"
+      >
+    </div>
+    
+    <button id="import-diary-btn" class="btn btn-letterboxd">
+      <span class="btn-icon">📥</span> Import Selected Month
+    </button>
+    <p class="helper-text">Imports diary entries for the month/year selected above</p>
+    
+    <div id="import-progress" class="import-progress" style="display: none;">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <p class="progress-text" id="progress-text">Fetching diary...</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <button id="complete-btn" class="btn btn-secondary">
+      <span class="btn-icon">✓</span> Complete
+    </button>
+
+    <button id="download-btn" class="btn btn-download" style="display: none;">
+      <span class="btn-icon">↓</span> Download PNG
+    </button>
+
+    <button id="clear-movies-btn" class="btn btn-danger">
+      <span class="btn-icon">🗑</span> Clear All Movies
+    </button>
+
+    <div id="error-message" class="error-message"></div>
+    <div id="success-message" class="success-message"></div>
+
+    <div class="movie-list" id="movie-list">
+      <div class="movie-list-header">
+        <h3>Added Movies</h3>
+        <span id="movie-list-count" class="movie-list-count">0</span>
+      </div>
+      <ul id="movie-list-items"></ul>
+    </div>
+  </div>
+
+  <!-- Export Area (Will be converted to PNG) -->
+  <div class="preview-container">
+    <!-- View Toggle -->
+    <div class="view-toggle">
+      <button class="view-btn active" id="grid-view-btn" title="Grid View">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>Grid</span>
+      </button>
+      <button class="view-btn" id="calendar-view-btn" title="Calendar View">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+        </svg>
+        <span>Calendar</span>
+      </button>
+    </div>
+
+    <div id="export-area">
+      <header class="export-header">
+        <h1 id="month-title">January 2026</h1>
+        <p id="movie-count">0 films watched</p>
+      </header>
+
+      <div id="movies-grid" class="movies-grid"></div>
+      
+      <!-- Calendar View (hidden by default) -->
+      <div id="calendar-view" class="calendar-view" style="display: none;"></div>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
