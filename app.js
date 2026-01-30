@@ -481,9 +481,31 @@ function handleEscapeKey(e) {
 // RENDER FUNCTIONS
 // ============================================
 
+// Apply dynamic scaling based on movie count (Layer 2)
+function applyDynamicScaling() {
+  const exportArea = document.getElementById('export-area');
+  const count = movies.length;
+  
+  // Remove all scale classes
+  exportArea.classList.remove('scale-medium', 'scale-compact', 'scale-ultra');
+  
+  // Apply appropriate scale class based on count
+  if (count > 100) {
+    exportArea.classList.add('scale-ultra');
+  } else if (count > 60) {
+    exportArea.classList.add('scale-compact');
+  } else if (count > 30) {
+    exportArea.classList.add('scale-medium');
+  }
+  // Default (≤30): no scale class needed
+}
+
 function renderMoviesGrid() {
   moviesGrid.innerHTML = '';
   sortMoviesByDate();
+  
+  // Apply dynamic scaling based on count
+  applyDynamicScaling();
   
   movies.forEach((movie, index) => {
     const card = createMovieCard(movie, index);
@@ -673,7 +695,7 @@ function clearAllMovies() {
 clearMoviesBtn?.addEventListener('click', clearAllMovies);
 
 // ============================================
-// LETTERBOXD IMPORT
+// LETTERBOXD IMPORT (with Pagination Support)
 // ============================================
 
 function parseLetterboxdUrl(url) {
@@ -701,14 +723,139 @@ function parseSelectedMonth() {
   return { month, year };
 }
 
-async function fetchLetterboxdDiary(username, year, month) {
+// Fetch a single diary page HTML
+async function fetchDiaryPage(username, year, month, page = 1) {
+  const diaryUrl = `https://letterboxd.com/${username}/films/diary/${year}/${month}/page/${page}/`;
+  
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const proxyUrl = proxy + encodeURIComponent(diaryUrl);
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const html = await response.text();
+        if (html && html.includes('diary-entry-row')) {
+          return html;
+        }
+      }
+    } catch (error) {
+      console.warn(`Proxy failed for page ${page}:`, error.message);
+    }
+  }
+  return null;
+}
+
+// Parse diary entries from HTML page
+function parseDiaryPageHTML(html, targetYear, targetMonth) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const rows = doc.querySelectorAll('tr.diary-entry-row');
+  const entries = [];
+  
+  rows.forEach(row => {
+    try {
+      // Get film title
+      const titleEl = row.querySelector('td.td-film-details h3.headline-3 a');
+      const title = titleEl ? titleEl.textContent.trim() : null;
+      if (!title) return;
+      
+      // Get release year
+      const yearEl = row.querySelector('td.td-film-details .metadata span');
+      const year = yearEl ? parseInt(yearEl.textContent) : null;
+      
+      // Get watched date
+      const dateLink = row.querySelector('td.td-day a');
+      const monthLink = row.querySelector('td.td-calendar a[href*="/diary/"]');
+      
+      let watchedDate = null;
+      if (dateLink && monthLink) {
+        const day = dateLink.textContent.trim();
+        // Extract month/year from the href
+        const hrefMatch = monthLink.getAttribute('href')?.match(/\/diary\/(\d{4})\/(\d{2})\//);
+        if (hrefMatch) {
+          const [, y, m] = hrefMatch;
+          watchedDate = `${y}-${m}-${day.padStart(2, '0')}`;
+        }
+      }
+      
+      // Validate month/year
+      if (watchedDate) {
+        const [wy, wm] = watchedDate.split('-').map(Number);
+        if (wy !== targetYear || wm !== targetMonth) return;
+      }
+      
+      // Get rating
+      const ratingEl = row.querySelector('td.td-rating .rating');
+      let rating = 3;
+      if (ratingEl) {
+        const ratingClass = Array.from(ratingEl.classList).find(c => c.startsWith('rated-'));
+        if (ratingClass) {
+          rating = parseInt(ratingClass.replace('rated-', '')) / 2;
+        }
+      }
+      
+      // Check for rewatch
+      const rewatchEl = row.querySelector('td.td-rewatch .icon-rewatch');
+      const rewatch = !!rewatchEl;
+      
+      entries.push({ title, year, rating, rewatch, watchedDate });
+    } catch (e) {
+      console.warn('Failed to parse diary row:', e);
+    }
+  });
+  
+  return entries;
+}
+
+// Check if there are more pages
+function hasMorePages(html) {
+  return html && html.includes('paginate-nextprev') && html.includes('next');
+}
+
+// Fetch all diary entries with pagination (Layer 1)
+async function fetchLetterboxdDiaryPaginated(username, year, month) {
+  const allEntries = [];
+  let page = 1;
+  const maxPages = 10; // Safety limit (10 pages = ~500 entries max)
+  
+  updateProgress(10, `Fetching diary page 1...`);
+  
+  while (page <= maxPages) {
+    const html = await fetchDiaryPage(username, year, month, page);
+    
+    if (!html) {
+      if (page === 1) {
+        // First page failed, fall back to RSS
+        console.log('Diary pages unavailable, falling back to RSS...');
+        return null;
+      }
+      break;
+    }
+    
+    const entries = parseDiaryPageHTML(html, parseInt(year), parseInt(month));
+    console.log(`Page ${page}: found ${entries.length} entries`);
+    
+    if (entries.length === 0) break;
+    
+    allEntries.push(...entries);
+    updateProgress(10 + (page * 5), `Found ${allEntries.length} movies (page ${page})...`);
+    
+    if (!hasMorePages(html) || entries.length < 50) break;
+    
+    page++;
+    await new Promise(r => setTimeout(r, 300)); // Rate limit
+  }
+  
+  return allEntries;
+}
+
+// Original RSS fetch (fallback)
+async function fetchLetterboxdDiaryRSS(username, year, month) {
   const rssUrl = `https://letterboxd.com/${username}/rss/`;
-  updateProgress(15, `Fetching ${username}'s diary...`);
   
   for (let i = 0; i < CORS_PROXIES.length; i++) {
     const proxy = CORS_PROXIES[i];
     try {
-      updateProgress(15 + (i * 10), `Connecting (${i + 1}/${CORS_PROXIES.length})...`);
       const proxyUrl = proxy + encodeURIComponent(rssUrl);
       const response = await fetch(proxyUrl);
       
@@ -721,6 +868,31 @@ async function fetchLetterboxdDiary(username, year, month) {
     } catch (error) {
       console.warn(`Proxy ${proxy} failed:`, error.message);
     }
+  }
+  
+  return null;
+}
+
+// Main fetch function - tries pagination first, falls back to RSS
+async function fetchLetterboxdDiary(username, year, month) {
+  updateProgress(5, `Connecting to Letterboxd...`);
+  
+  // Try paginated diary fetch first (supports 100+ movies)
+  const paginatedEntries = await fetchLetterboxdDiaryPaginated(username, year, month);
+  
+  if (paginatedEntries && paginatedEntries.length > 0) {
+    console.log(`Pagination successful: ${paginatedEntries.length} entries`);
+    return { entries: paginatedEntries, source: 'pagination' };
+  }
+  
+  // Fallback to RSS (limited to ~50 entries)
+  console.log('Falling back to RSS feed...');
+  updateProgress(15, `Fetching RSS feed...`);
+  
+  const rssData = await fetchLetterboxdDiaryRSS(username, year, month);
+  
+  if (rssData) {
+    return { ...rssData, source: 'rss' };
   }
   
   throw new Error(`Could not fetch data for "${username}". Check the username and try again.`);
@@ -803,10 +975,20 @@ async function importFromLetterboxd() {
   
   try {
     updateProgress(10, `Fetching diary for ${getSelectedMonthDisplay()}...`);
-    const { xml, targetMonth, targetYear } = await fetchLetterboxdDiary(username, year, month);
+    const fetchResult = await fetchLetterboxdDiary(username, year, month);
     
-    updateProgress(30, 'Parsing entries...');
-    const diaryEntries = parseLetterboxdRSS(xml, targetMonth, targetYear);
+    let diaryEntries;
+    
+    if (fetchResult.source === 'pagination') {
+      // Direct entries from paginated fetch
+      diaryEntries = fetchResult.entries;
+      console.log(`Using pagination: ${diaryEntries.length} entries`);
+    } else {
+      // Parse RSS feed
+      updateProgress(30, 'Parsing RSS entries...');
+      diaryEntries = parseLetterboxdRSS(fetchResult.xml, fetchResult.targetMonth, fetchResult.targetYear);
+      console.log(`Using RSS: ${diaryEntries.length} entries`);
+    }
     
     if (diaryEntries.length === 0) {
       showError(`No entries found for ${getSelectedMonthDisplay()}`);
@@ -1074,23 +1256,66 @@ async function downloadPNG() {
   }
   
   try {
-    showToast('Loading all movie posters...', 'success');
-    
-    // Step 1: Preload ALL movie poster images as data URLs
     const totalMovies = movies.length;
-    const imageDataUrls = [];
+    showToast(`Preparing ${totalMovies} posters for export...`, 'success');
     
-    for (let i = 0; i < movies.length; i++) {
-      const movie = movies[i];
+    // Layer 3: Dynamic export settings based on count
+    let gridColumns, gridGap, fontSize, badgeSize, exportWidth, canvasScale;
+    
+    if (totalMovies > 100) {
+      // Ultra mode: 10 columns, smaller everything
+      gridColumns = 10;
+      gridGap = 8;
+      fontSize = { title: 32, count: 14, stars: 10, badge: 7 };
+      badgeSize = { padding: '1px 3px', top: 3 };
+      exportWidth = 1400;
+      canvasScale = 2;
+    } else if (totalMovies > 60) {
+      // Compact mode: 8 columns
+      gridColumns = 8;
+      gridGap = 12;
+      fontSize = { title: 36, count: 16, stars: 11, badge: 8 };
+      badgeSize = { padding: '2px 4px', top: 4 };
+      exportWidth = 1300;
+      canvasScale = 2;
+    } else if (totalMovies > 30) {
+      // Medium mode: 7 columns
+      gridColumns = 7;
+      gridGap = 16;
+      fontSize = { title: 40, count: 17, stars: 12, badge: 9 };
+      badgeSize = { padding: '2px 5px', top: 5 };
+      exportWidth = 1250;
+      canvasScale = 2;
+    } else {
+      // Default mode: 6 columns
+      gridColumns = 6;
+      gridGap = 20;
+      fontSize = { title: 42, count: 18, stars: 14, badge: 10 };
+      badgeSize = { padding: '3px 6px', top: 6 };
+      exportWidth = 1200;
+      canvasScale = 2;
+    }
+    
+    // Step 1: Preload ALL movie poster images as data URLs (batched for large counts)
+    const imageDataUrls = [];
+    const batchSize = totalMovies > 50 ? 10 : 5;
+    
+    for (let i = 0; i < movies.length; i += batchSize) {
+      const batch = movies.slice(i, i + batchSize);
+      
+      const batchResults = await Promise.all(batch.map(async (movie) => {
+        return await loadImageAsDataUrl(movie.posterUrl);
+      }));
+      
+      imageDataUrls.push(...batchResults.map((url, idx) => url || movies[i + idx].posterUrl));
+      
       if (downloadBtn) {
-        downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> ${i + 1}/${totalMovies}`;
+        const loaded = Math.min(i + batchSize, totalMovies);
+        downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> ${loaded}/${totalMovies}`;
       }
       
-      const dataUrl = await loadImageAsDataUrl(movie.posterUrl);
-      imageDataUrls.push(dataUrl || movie.posterUrl);
-      
-      // Small delay between requests
-      await new Promise(r => setTimeout(r, 100));
+      // Smaller delay for large batches
+      await new Promise(r => setTimeout(r, totalMovies > 50 ? 50 : 100));
     }
     
     if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Building...';
@@ -1103,16 +1328,16 @@ async function downloadPNG() {
       top: 0;
       background: #0c0f13;
       padding: 40px;
-      width: 1200px;
+      width: ${exportWidth}px;
     `;
     
     // Header
     exportClone.innerHTML = `
       <div style="text-align: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <h1 style="font-family: 'Outfit', sans-serif; font-size: 42px; font-weight: 800; color: #f5f5f7; margin: 0 0 8px 0; letter-spacing: -1px;">${getSelectedMonthDisplay()}</h1>
-        <p style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #a1a8b3; margin: 0;">${totalMovies} film${totalMovies !== 1 ? 's' : ''} watched</p>
+        <h1 style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.title}px; font-weight: 800; color: #f5f5f7; margin: 0 0 8px 0; letter-spacing: -1px;">${getSelectedMonthDisplay()}</h1>
+        <p style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.count}px; color: #a1a8b3; margin: 0;">${totalMovies} film${totalMovies !== 1 ? 's' : ''} watched</p>
       </div>
-      <div id="clone-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px;"></div>
+      <div id="clone-grid" style="display: grid; grid-template-columns: repeat(${gridColumns}, 1fr); gap: ${gridGap}px;"></div>
     `;
     
     document.body.appendChild(exportClone);
@@ -1130,10 +1355,10 @@ async function downloadPNG() {
       
       card.innerHTML = `
         <div style="position: relative; aspect-ratio: 2/3; border-radius: 4px; overflow: hidden; background: #13171c; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
-          ${dateBadge ? `<div style="position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.85); color: #f5f5f7; font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 600; padding: 3px 6px; border-radius: 4px; z-index: 2;">${dateBadge}</div>` : ''}
-          ${rewatchBadge ? `<div style="position: absolute; top: 6px; right: 6px; background: rgba(64,188,244,0.2); border: 1px solid #40bcf4; color: #40bcf4; font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; z-index: 3;">${rewatchBadge}</div>` : ''}
+          ${dateBadge ? `<div style="position: absolute; top: ${badgeSize.top}px; left: ${badgeSize.top}px; background: rgba(0,0,0,0.85); color: #f5f5f7; font-family: 'Outfit', sans-serif; font-size: ${fontSize.badge}px; font-weight: 600; padding: ${badgeSize.padding}; border-radius: 4px; z-index: 2;">${dateBadge}</div>` : ''}
+          ${rewatchBadge ? `<div style="position: absolute; top: ${badgeSize.top}px; right: ${badgeSize.top}px; background: rgba(64,188,244,0.2); border: 1px solid #40bcf4; color: #40bcf4; font-family: 'Outfit', sans-serif; font-size: ${fontSize.badge}px; font-weight: 700; padding: ${badgeSize.padding}; border-radius: 4px; z-index: 3;">${rewatchBadge}</div>` : ''}
           <img src="${imageDataUrls[index]}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
-          <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 6px; text-align: center; color: #00e054; font-family: 'Outfit', sans-serif; font-size: 14px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 6px; text-align: center; color: #00e054; font-family: 'Outfit', sans-serif; font-size: ${fontSize.stars}px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);">
             ${stars}${movie.rewatch ? '<span style="margin-left: 4px; color: #40bcf4;">↻</span>' : ''}
           </div>
         </div>
@@ -1143,17 +1368,18 @@ async function downloadPNG() {
     });
     
     // Wait for inline images to render
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, totalMovies > 50 ? 800 : 500));
     
     if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Capturing...';
     
     // Step 3: Capture the clone
     const canvas = await html2canvas(exportClone, {
       backgroundColor: '#0c0f13',
-      scale: 2,
-      logging: true,
+      scale: canvasScale,
+      logging: false,
       useCORS: true,
       allowTaint: true,
+      imageTimeout: 30000,
     });
     
     // Clean up clone

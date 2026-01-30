@@ -333,6 +333,69 @@ body.panel-open {
   gap: var(--space-md);
 }
 
+/* ============================================
+   DYNAMIC POSTER SCALING (Layer 2)
+   Automatically adjusts grid for high movie counts
+   ============================================ */
+
+/* Medium count (30-60 movies) */
+#export-area.scale-medium .movies-grid {
+  gap: var(--space-sm);
+}
+
+/* High count (60-100 movies) */
+#export-area.scale-compact .movies-grid {
+  gap: 8px;
+}
+
+#export-area.scale-compact .poster-container {
+  border-radius: 3px;
+}
+
+#export-area.scale-compact .stars-overlay {
+  font-size: 10px;
+  padding: 4px 3px;
+}
+
+#export-area.scale-compact .date-badge {
+  font-size: 8px;
+  padding: 2px 4px;
+}
+
+#export-area.scale-compact .rewatch-badge {
+  font-size: 8px;
+  padding: 1px 4px;
+}
+
+/* Ultra high count (100+ movies) */
+#export-area.scale-ultra .movies-grid {
+  gap: 6px;
+}
+
+#export-area.scale-ultra .poster-container {
+  border-radius: 2px;
+}
+
+#export-area.scale-ultra .stars-overlay {
+  font-size: 9px;
+  padding: 3px 2px;
+  letter-spacing: 0;
+}
+
+#export-area.scale-ultra .date-badge {
+  font-size: 7px;
+  padding: 1px 3px;
+  top: 3px;
+  left: 3px;
+}
+
+#export-area.scale-ultra .rewatch-badge {
+  font-size: 7px;
+  padding: 1px 3px;
+  top: 3px;
+  right: 3px;
+}
+
 .movie-card {
   position: relative;
   animation: fadeInScale 0.4s ease backwards;
@@ -1493,6 +1556,19 @@ body.panel-open {
     gap: var(--space-lg);
   }
   
+  /* Tablet scaling adjustments */
+  #export-area.scale-medium .movies-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  #export-area.scale-compact .movies-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  
+  #export-area.scale-ultra .movies-grid {
+    grid-template-columns: repeat(7, 1fr);
+  }
+  
   .calendar-day {
     min-height: 70px;
     padding: var(--space-sm);
@@ -1598,6 +1674,19 @@ body.panel-open {
   .movies-grid {
     grid-template-columns: repeat(5, 1fr);
     gap: var(--space-lg);
+  }
+  
+  /* Desktop scaling adjustments */
+  #export-area.scale-medium .movies-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  
+  #export-area.scale-compact .movies-grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+  
+  #export-area.scale-ultra .movies-grid {
+    grid-template-columns: repeat(10, 1fr);
   }
   
   #export-area {
