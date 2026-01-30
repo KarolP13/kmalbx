@@ -1646,38 +1646,47 @@ body.panel-open {
 
 .attribution {
   position: fixed;
-  bottom: var(--space-md);
-  right: var(--space-md);
+  bottom: var(--space-lg);
+  left: var(--space-lg);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px;
   z-index: 50;
-  opacity: 0.6;
-  transition: opacity var(--transition-fast);
-}
-
-.attribution:hover {
-  opacity: 1;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
 }
 
 .attribution a {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-decoration: none;
   transition: color var(--transition-fast);
+}
+
+.attribution a:first-child {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .attribution a:hover {
   color: var(--accent-green);
 }
 
-/* Hide on very small screens to avoid overlap with FAB */
 @media (max-width: 480px) {
   .attribution {
-    bottom: calc(90px + var(--safe-area-bottom));
-    font-size: 10px;
+    bottom: var(--space-md);
+    left: var(--space-md);
+    padding: 8px 12px;
+  }
+  
+  .attribution a {
+    font-size: 11px;
   }
 }
