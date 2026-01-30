@@ -27,7 +27,10 @@ let currentView = 'grid';
 let showDatesOnPosters = true;
 let showStarRatings = true;
 let showLetterboxdAttribution = true;
-let letterboxdUsername = null; // Set when importing from Letterboxd
+let letterboxdUsername = null; // Set when importing from Letterboxd diary
+let currentListData = null; // Set when importing from Letterboxd list
+let currentImportMode = 'diary'; // 'diary' or 'list'
+let originalListOrder = []; // Preserve original list order for reset
 let isPanelOpen = false;
 
 const MONTH_NAMES = [
@@ -62,6 +65,14 @@ const importDiaryBtn = document.getElementById('import-diary-btn');
 const importProgress = document.getElementById('import-progress');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
+
+// List mode elements
+const listUrlInput = document.getElementById('list-url');
+const importListBtn = document.getElementById('import-list-btn');
+const listSortOptions = document.getElementById('list-sort-options');
+const listSortSelect = document.getElementById('list-sort');
+const diaryModeContent = document.getElementById('diary-mode');
+const listModeContent = document.getElementById('list-mode');
 
 // Panel elements
 const controlsPanel = document.getElementById('controls-panel');
@@ -210,6 +221,22 @@ function formatDateBadge(dateStr) {
 
 function getSelectedMonthDisplay() {
   return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+}
+
+function getExportTitle() {
+  // Use list title if in list mode
+  if (currentListData && currentImportMode === 'list') {
+    return currentListData.title;
+  }
+  return getSelectedMonthDisplay();
+}
+
+function getExportSubtitle() {
+  const count = movies.length;
+  if (currentListData && currentImportMode === 'list') {
+    return `${count} film${count !== 1 ? 's' : ''} • by ${currentListData.creator}`;
+  }
+  return `${count} film${count !== 1 ? 's' : ''} watched`;
 }
 
 function parseWatchedDate(dateStr) {
@@ -649,8 +676,8 @@ function renderMoviesGrid() {
 
 function updateMovieCount() {
   const count = movies.length;
-  movieCount.textContent = `${count} film${count !== 1 ? 's' : ''} watched`;
-  monthTitle.textContent = getSelectedMonthDisplay();
+  movieCount.textContent = getExportSubtitle();
+  monthTitle.textContent = getExportTitle();
   
   if (movieListCount) movieListCount.textContent = count;
   if (headerMovieCount) headerMovieCount.textContent = count;
@@ -807,16 +834,21 @@ function clearAllMovies() {
   
   movies = [];
   isComplete = false;
+  currentListData = null; // Reset list data
+  currentImportMode = 'diary';
+  letterboxdUsername = null;
   
   // Re-enable all inputs
   [monthSelect, yearSelect, movieInput, yearInput, ratingSelect, 
    rewatchCheckbox, showDatesCheckbox, watchDateInput, addMovieBtn, 
-   completeBtn, letterboxdUrl, importDiaryBtn, clearMoviesBtn].forEach(el => {
+   completeBtn, letterboxdUrl, importDiaryBtn, importListBtn, clearMoviesBtn].forEach(el => {
     if (el) el.disabled = false;
   });
   
   downloadBtn.style.display = 'none';
   if (fabDownload) fabDownload.style.display = 'none';
+  if (listSortOptions) listSortOptions.style.display = 'none';
+  if (attributionToggle) attributionToggle.style.display = 'none';
   
   renderMoviesGrid();
   renderMovieList();
@@ -1208,6 +1240,290 @@ async function importFromLetterboxd() {
 importDiaryBtn?.addEventListener('click', importFromLetterboxd);
 
 // ============================================
+// LETTERBOXD LISTS IMPORT
+// ============================================
+
+// Import mode tab switching
+document.querySelectorAll('.import-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.import-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    const mode = btn.dataset.mode;
+    currentImportMode = mode;
+    
+    if (mode === 'diary') {
+      diaryModeContent?.classList.add('active');
+      listModeContent?.classList.remove('active');
+    } else {
+      diaryModeContent?.classList.remove('active');
+      listModeContent?.classList.add('active');
+    }
+  });
+});
+
+function parseListUrl(url) {
+  // Extract list path from Letterboxd list URL
+  const patterns = [
+    /letterboxd\.com\/([^\/]+)\/list\/([^\/]+)/,
+    /letterboxd\.com\/([^\/]+)\/watchlist/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      const username = match[1];
+      const listSlug = match[2] || 'watchlist';
+      return { username, listSlug, isWatchlist: !match[2] };
+    }
+  }
+  
+  return null;
+}
+
+async function fetchLetterboxdList(username, listSlug, isWatchlist = false) {
+  const listUrl = isWatchlist 
+    ? `https://letterboxd.com/${username}/watchlist/`
+    : `https://letterboxd.com/${username}/list/${listSlug}/`;
+  
+  updateProgress(10, 'Fetching list...');
+  
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const proxyUrl = proxy + encodeURIComponent(listUrl);
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const html = await response.text();
+        if (html && (html.includes('poster-container') || html.includes('film-poster'))) {
+          return { html, username, listSlug };
+        }
+      }
+    } catch (error) {
+      console.warn('List fetch failed:', error.message);
+    }
+  }
+  
+  throw new Error('Could not fetch list. Make sure the URL is correct and the list is public.');
+}
+
+function parseListHTML(html, username) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  // Get list title
+  const titleEl = doc.querySelector('h1.title-1, .list-title-intro h1');
+  const listTitle = titleEl ? titleEl.textContent.trim() : 'Letterboxd List';
+  
+  // Get list description (optional)
+  const descEl = doc.querySelector('.list-title-intro .body-text');
+  const listDescription = descEl ? descEl.textContent.trim() : null;
+  
+  // Parse movies from list
+  const listEntries = [];
+  const filmPosters = doc.querySelectorAll('.poster-container, li.poster-container, .film-poster');
+  
+  filmPosters.forEach((poster, index) => {
+    try {
+      // Get film data from poster element
+      const filmEl = poster.querySelector('[data-film-slug]') || poster;
+      const filmSlug = filmEl.dataset?.filmSlug || filmEl.getAttribute('data-film-slug');
+      const filmName = filmEl.dataset?.filmName || filmEl.getAttribute('data-film-name');
+      
+      // Try getting from img alt as fallback
+      const img = poster.querySelector('img');
+      const altName = img?.alt;
+      
+      const title = filmName || altName;
+      if (!title) return;
+      
+      // Get year if available
+      const yearEl = poster.querySelector('.film-year, .metadata');
+      const year = yearEl ? parseInt(yearEl.textContent) : null;
+      
+      // Get average rating from Letterboxd if available
+      const ratingEl = poster.querySelector('.average-rating, [data-average-rating]');
+      let avgRating = null;
+      if (ratingEl) {
+        avgRating = parseFloat(ratingEl.dataset?.averageRating || ratingEl.textContent);
+      }
+      
+      listEntries.push({
+        title,
+        year,
+        avgRating,
+        listIndex: index,
+        slug: filmSlug
+      });
+    } catch (e) {
+      console.warn('Failed to parse list item:', e);
+    }
+  });
+  
+  return {
+    title: listTitle,
+    description: listDescription,
+    creator: username,
+    movies: listEntries
+  };
+}
+
+function sortListMovies(sortBy) {
+  if (!currentListData || movies.length === 0) return;
+  
+  switch (sortBy) {
+    case 'original':
+      // Restore original order
+      movies.sort((a, b) => (a.listIndex || 0) - (b.listIndex || 0));
+      break;
+    case 'rating-high':
+      movies.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
+      break;
+    case 'rating-low':
+      movies.sort((a, b) => (a.avgRating || 0) - (b.avgRating || 0));
+      break;
+    case 'year-new':
+      movies.sort((a, b) => (b.year || 0) - (a.year || 0));
+      break;
+    case 'year-old':
+      movies.sort((a, b) => (a.year || 0) - (b.year || 0));
+      break;
+    case 'alpha':
+      movies.sort((a, b) => a.title.localeCompare(b.title));
+      break;
+  }
+  
+  renderMoviesGrid();
+  renderMovieList();
+}
+
+listSortSelect?.addEventListener('change', (e) => {
+  sortListMovies(e.target.value);
+});
+
+async function importFromList() {
+  const urlInput = listUrlInput?.value.trim();
+  
+  if (!urlInput) {
+    showError('Enter a Letterboxd list URL');
+    return;
+  }
+  
+  const listInfo = parseListUrl(urlInput);
+  if (!listInfo) {
+    showError('Invalid list URL. Use format: letterboxd.com/user/list/list-name/');
+    return;
+  }
+  
+  importProgress.style.display = 'block';
+  importListBtn.disabled = true;
+  importListBtn.innerHTML = '<span class="btn-icon">⏳</span> Importing...';
+  
+  try {
+    const { html, username } = await fetchLetterboxdList(listInfo.username, listInfo.listSlug, listInfo.isWatchlist);
+    
+    updateProgress(25, 'Parsing list...');
+    const listData = parseListHTML(html, username);
+    
+    if (listData.movies.length === 0) {
+      showError('No movies found in this list');
+      return;
+    }
+    
+    currentListData = listData;
+    currentImportMode = 'list';
+    
+    // Clear existing movies
+    movies = [];
+    
+    updateProgress(35, `Found ${listData.movies.length} movies. Fetching posters...`);
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (let i = 0; i < listData.movies.length; i++) {
+      const entry = listData.movies[i];
+      const progress = 35 + ((i + 1) / listData.movies.length) * 60;
+      updateProgress(progress, `${entry.title} (${i + 1}/${listData.movies.length})`);
+      
+      try {
+        const movieData = await searchMovie(entry.title, entry.year);
+        
+        if (movieData && movieData.poster_path) {
+          const posterUrl = getPosterUrl(movieData.poster_path);
+          const allPosters = await fetchMoviePosters(movieData.id);
+          
+          if (!allPosters.find(p => (typeof p === 'string' ? p : p.url) === posterUrl)) {
+            allPosters.unshift({ url: posterUrl, lang: 'en', isEnglish: true });
+          }
+          
+          movies.push({
+            id: Date.now() + i,
+            tmdbId: movieData.id,
+            title: movieData.title,
+            year: new Date(movieData.release_date).getFullYear() || entry.year || 'N/A',
+            posterUrl,
+            allPosters,
+            rating: entry.avgRating, // Use Letterboxd average rating
+            avgRating: entry.avgRating,
+            rewatch: false,
+            listIndex: entry.listIndex,
+            watchedDate: null
+          });
+          
+          successCount++;
+        } else {
+          failCount++;
+        }
+        
+        await new Promise(r => setTimeout(r, 150));
+      } catch (e) {
+        failCount++;
+        console.warn(`Failed to fetch: ${entry.title}`, e);
+      }
+    }
+    
+    updateProgress(100, 'Complete!');
+    
+    // Update header for list mode
+    monthTitle.textContent = listData.title;
+    movieCount.textContent = `${successCount} film${successCount !== 1 ? 's' : ''} • by ${listData.creator}`;
+    
+    // Show sort options
+    if (listSortOptions) {
+      listSortOptions.style.display = 'block';
+      listSortSelect.value = 'original';
+    }
+    
+    // Show attribution toggle
+    if (attributionToggle) {
+      attributionToggle.style.display = 'block';
+    }
+    
+    renderMoviesGrid();
+    renderMovieList();
+    
+    let message = `Imported ${successCount} movies from "${listData.title}"`;
+    if (failCount > 0) message += ` (${failCount} not found)`;
+    showSuccess(message);
+    
+  } catch (error) {
+    showError(error.message);
+    console.error('List import error:', error);
+  } finally {
+    setTimeout(() => {
+      importProgress.style.display = 'none';
+      progressFill.style.width = '0%';
+    }, 2000);
+    
+    importListBtn.disabled = false;
+    importListBtn.innerHTML = '<span class="btn-icon">📥</span> Import List';
+  }
+}
+
+importListBtn?.addEventListener('click', importFromList);
+
+// ============================================
 // EVENT HANDLERS
 // ============================================
 
@@ -1493,8 +1809,8 @@ async function downloadPNG() {
     // Header
     exportClone.innerHTML = `
       <div style="text-align: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <h1 style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.title}px; font-weight: 800; color: #f5f5f7; margin: 0 0 8px 0; letter-spacing: -1px;">${getSelectedMonthDisplay()}</h1>
-        <p style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.count}px; color: #a1a8b3; margin: 0;">${totalMovies} film${totalMovies !== 1 ? 's' : ''} watched</p>
+        <h1 style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.title}px; font-weight: 800; color: #f5f5f7; margin: 0 0 8px 0; letter-spacing: -1px;">${getExportTitle()}</h1>
+        <p style="font-family: 'Outfit', sans-serif; font-size: ${fontSize.count}px; color: #a1a8b3; margin: 0;">${getExportSubtitle()}</p>
       </div>
       <div id="clone-grid" style="display: grid; grid-template-columns: repeat(${gridColumns}, 1fr); gap: ${gridGap}px;"></div>
     `;
@@ -1536,19 +1852,33 @@ async function downloadPNG() {
       grid.appendChild(card);
     });
     
-    // Add Letterboxd attribution if enabled and username exists
-    if (showLetterboxdAttribution && letterboxdUsername) {
+    // Add Letterboxd attribution if enabled and username/list exists
+    if (showLetterboxdAttribution && (letterboxdUsername || currentListData)) {
       const attribution = document.createElement('div');
+      const displayName = currentListData ? currentListData.creator : letterboxdUsername;
+      
       attribution.style.cssText = `
-        text-align: right;
-        margin-top: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 20px;
         padding-top: 16px;
-        border-top: 1px solid rgba(255,255,255,0.1);
         font-family: 'Outfit', sans-serif;
-        font-size: 12px;
-        color: rgba(255,255,255,0.5);
+        font-size: 13px;
+        opacity: 0.7;
       `;
-      attribution.textContent = `letterboxd.com/${letterboxdUsername}`;
+      
+      // Letterboxd-style icon (three dots representing the logo)
+      attribution.innerHTML = `
+        <span style="display: flex; gap: 3px;">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #00e054;"></span>
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #40bcf4;"></span>
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #ff8000;"></span>
+        </span>
+        <span style="color: rgba(255,255,255,0.6); font-weight: 500;">${displayName}</span>
+      `;
+      
       exportClone.appendChild(attribution);
     }
     
@@ -1572,7 +1902,7 @@ async function downloadPNG() {
     
     // Step 4: Download
     const link = document.createElement('a');
-    link.download = `${getSelectedMonthDisplay().replace(/\s+/g, '-')}-Movies.png`;
+    link.download = `${getExportTitle().replace(/\s+/g, '-')}-Movies.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
     

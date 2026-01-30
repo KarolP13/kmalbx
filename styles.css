@@ -1184,6 +1184,50 @@ body.panel-open {
 }
 
 /* ============================================
+   IMPORT MODE TABS
+   ============================================ */
+
+.import-mode-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  padding: 3px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+}
+
+.import-mode-btn {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.import-mode-btn:hover {
+  color: var(--text-secondary);
+}
+
+.import-mode-btn.active {
+  background: var(--accent-orange);
+  color: var(--bg-dark);
+}
+
+.import-mode-content {
+  display: none;
+}
+
+.import-mode-content.active {
+  display: block;
+}
+
+/* ============================================
    MOVIE LIST (Sidebar)
    ============================================ */
 

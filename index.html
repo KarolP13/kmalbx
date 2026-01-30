@@ -198,26 +198,66 @@
       <div class="panel-section">
         <div class="section-label">Import from Letterboxd</div>
         
-        <div class="control-group">
-          <label for="letterboxd-url">Username or Profile URL</label>
-          <input 
-            type="text" 
-            id="letterboxd-url" 
-            placeholder="e.g., username"
-          >
+        <!-- Import Mode Tabs -->
+        <div class="import-mode-tabs">
+          <button class="import-mode-btn active" data-mode="diary">📅 Diary</button>
+          <button class="import-mode-btn" data-mode="list">📋 Lists</button>
         </div>
         
-        <button id="import-diary-btn" class="btn btn-letterboxd">
-          <span class="btn-icon">📥</span> Import Month's Diary
-        </button>
+        <!-- Diary Mode -->
+        <div id="diary-mode" class="import-mode-content active">
+          <div class="control-group">
+            <label for="letterboxd-url">Username or Profile URL</label>
+            <input 
+              type="text" 
+              id="letterboxd-url" 
+              placeholder="e.g., username"
+            >
+          </div>
+          
+          <button id="import-diary-btn" class="btn btn-letterboxd">
+            <span class="btn-icon">📥</span> Import Month's Diary
+          </button>
+          
+          <p class="helper-text">Imports watched movies for the selected month from your diary.</p>
+        </div>
         
-        <p class="helper-text">Automatically imports your watched movies for the selected month from your Letterboxd diary.</p>
+        <!-- List Mode -->
+        <div id="list-mode" class="import-mode-content">
+          <div class="control-group">
+            <label for="list-url">Letterboxd List URL</label>
+            <input 
+              type="text" 
+              id="list-url" 
+              placeholder="e.g., letterboxd.com/user/list/list-name/"
+            >
+          </div>
+          
+          <button id="import-list-btn" class="btn btn-letterboxd">
+            <span class="btn-icon">📥</span> Import List
+          </button>
+          
+          <p class="helper-text">Import all movies from any public Letterboxd list.</p>
+          
+          <!-- Sort Options (shown after import) -->
+          <div id="list-sort-options" class="control-group" style="display: none;">
+            <label for="list-sort">Sort list by</label>
+            <select id="list-sort">
+              <option value="original">Original list order</option>
+              <option value="rating-high">Letterboxd rating (high → low)</option>
+              <option value="rating-low">Letterboxd rating (low → high)</option>
+              <option value="year-new">Release year (new → old)</option>
+              <option value="year-old">Release year (old → new)</option>
+              <option value="alpha">Alphabetical (A–Z)</option>
+            </select>
+          </div>
+        </div>
         
         <div id="import-progress" class="import-progress" style="display: none;">
           <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
           </div>
-          <p class="progress-text" id="progress-text">Fetching diary...</p>
+          <p class="progress-text" id="progress-text">Fetching...</p>
         </div>
       </div>
 
@@ -247,7 +287,7 @@
           <label class="checkbox-label">
             <input type="checkbox" id="show-attribution-checkbox" checked>
             <span class="checkmark"></span>
-            <span>Show Letterboxd username</span>
+            <span>Show Letterboxd attribution</span>
           </label>
         </div>
       </div>
