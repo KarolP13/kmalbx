@@ -224,22 +224,35 @@
         
         <!-- List Mode -->
         <div id="list-mode" class="import-mode-content">
-          <div class="control-group">
-            <label for="list-url">Letterboxd List URL</label>
-            <input 
-              type="text" 
-              id="list-url" 
-              placeholder="e.g., letterboxd.com/user/list/list-name/"
-            >
+          <!-- Import Section -->
+          <div class="list-section">
+            <div class="control-group">
+              <label for="list-url">Import from Letterboxd</label>
+              <input 
+                type="text" 
+                id="list-url" 
+                placeholder="e.g., letterboxd.com/user/list/list-name/"
+              >
+            </div>
+            
+            <button id="import-list-btn" class="btn btn-letterboxd">
+              <span class="btn-icon">📥</span> Import List
+            </button>
           </div>
           
-          <button id="import-list-btn" class="btn btn-letterboxd">
-            <span class="btn-icon">📥</span> Import List
-          </button>
+          <div class="list-divider">
+            <span>or</span>
+          </div>
           
-          <p class="helper-text">Import all movies from any public Letterboxd list.</p>
+          <!-- Create New List Section -->
+          <div class="list-section">
+            <button id="create-list-btn" class="btn btn-secondary">
+              <span class="btn-icon">✚</span> Create New List
+            </button>
+            <p class="helper-text">Build a custom list and export it to Letterboxd.</p>
+          </div>
           
-          <!-- Sort Options (shown after import) -->
+          <!-- Sort Options (shown after import/create) -->
           <div id="list-sort-options" class="control-group" style="display: none;">
             <label for="list-sort">Sort list by</label>
             <select id="list-sort">
@@ -250,6 +263,15 @@
               <option value="year-old">Release year (old → new)</option>
               <option value="alpha">Alphabetical (A–Z)</option>
             </select>
+          </div>
+          
+          <!-- Export to Letterboxd -->
+          <div id="export-csv-section" style="display: none;">
+            <div class="divider"></div>
+            <button id="export-csv-btn" class="btn btn-primary">
+              <span class="btn-icon">📤</span> Export to Letterboxd
+            </button>
+            <p class="helper-text">Downloads a CSV file. Upload it to Letterboxd via: Settings → Import & Export → Import List</p>
           </div>
         </div>
         

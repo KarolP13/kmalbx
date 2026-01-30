@@ -1227,6 +1227,105 @@ body.panel-open {
   display: block;
 }
 
+/* List Section Styling */
+.list-section {
+  margin-bottom: var(--space-md);
+}
+
+.list-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-lg) 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.list-divider::before,
+.list-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* Create List Modal */
+.create-list-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.create-list-content {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+.create-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.create-list-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.create-list-body {
+  padding: var(--space-lg);
+}
+
+.create-list-body .control-group {
+  margin-bottom: var(--space-md);
+}
+
+.create-list-body textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  resize: vertical;
+  min-height: 80px;
+}
+
+.create-list-body textarea:focus {
+  outline: none;
+  border-color: var(--accent-green);
+}
+
+.create-list-footer {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  padding-top: 0;
+}
+
+.create-list-footer .btn {
+  flex: 1;
+}
+
 /* ============================================
    MOVIE LIST (Sidebar)
    ============================================ */

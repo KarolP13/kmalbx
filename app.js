@@ -33,6 +33,10 @@ let currentImportMode = 'diary'; // 'diary' or 'list'
 let originalListOrder = []; // Preserve original list order for reset
 let isPanelOpen = false;
 
+// Custom list management
+let customLists = []; // Array of user-created lists
+let activeListId = null; // Currently active/editing list
+
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -672,6 +676,11 @@ function renderMoviesGrid() {
     const card = createMovieCard(movie, index);
     moviesGrid.appendChild(card);
   });
+  
+  // Update export visibility
+  if (typeof updateExportVisibility === 'function') {
+    updateExportVisibility();
+  }
 }
 
 function updateMovieCount() {
@@ -849,6 +858,9 @@ function clearAllMovies() {
   if (fabDownload) fabDownload.style.display = 'none';
   if (listSortOptions) listSortOptions.style.display = 'none';
   if (attributionToggle) attributionToggle.style.display = 'none';
+  if (document.getElementById('export-csv-section')) {
+    document.getElementById('export-csv-section').style.display = 'none';
+  }
   
   renderMoviesGrid();
   renderMovieList();
@@ -1489,10 +1501,15 @@ async function importFromList() {
     monthTitle.textContent = listData.title;
     movieCount.textContent = `${successCount} film${successCount !== 1 ? 's' : ''} • by ${listData.creator}`;
     
-    // Show sort options
+    // Show sort options and export
     if (listSortOptions) {
       listSortOptions.style.display = 'block';
       listSortSelect.value = 'original';
+    }
+    
+    // Show export CSV section
+    if (exportCsvSection) {
+      exportCsvSection.style.display = 'block';
     }
     
     // Show attribution toggle
@@ -1522,6 +1539,204 @@ async function importFromList() {
 }
 
 importListBtn?.addEventListener('click', importFromList);
+
+// ============================================
+// CUSTOM LIST CREATION & EXPORT
+// ============================================
+
+const createListBtn = document.getElementById('create-list-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+const exportCsvSection = document.getElementById('export-csv-section');
+
+function openCreateListModal() {
+  // Remove existing modal if any
+  closeCreateListModal();
+  
+  const modal = document.createElement('div');
+  modal.className = 'create-list-modal';
+  modal.id = 'create-list-modal';
+  modal.innerHTML = `
+    <div class="create-list-content">
+      <div class="create-list-header">
+        <h3>Create New List</h3>
+        <button class="poster-picker-close" id="close-create-modal">×</button>
+      </div>
+      <div class="create-list-body">
+        <div class="control-group">
+          <label for="new-list-title">List Title *</label>
+          <input type="text" id="new-list-title" placeholder="e.g., My Favorite Films">
+        </div>
+        <div class="control-group">
+          <label for="new-list-desc">Description (optional)</label>
+          <textarea id="new-list-desc" placeholder="What's this list about?"></textarea>
+        </div>
+      </div>
+      <div class="create-list-footer">
+        <button class="btn btn-secondary" id="cancel-create-list">Cancel</button>
+        <button class="btn btn-primary" id="confirm-create-list">Create List</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Focus the title input
+  setTimeout(() => {
+    document.getElementById('new-list-title')?.focus();
+  }, 100);
+  
+  // Event listeners
+  document.getElementById('close-create-modal')?.addEventListener('click', closeCreateListModal);
+  document.getElementById('cancel-create-list')?.addEventListener('click', closeCreateListModal);
+  document.getElementById('confirm-create-list')?.addEventListener('click', confirmCreateList);
+  
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeCreateListModal();
+  });
+  
+  // Enter key to submit
+  document.getElementById('new-list-title')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') confirmCreateList();
+  });
+}
+
+function closeCreateListModal() {
+  const modal = document.getElementById('create-list-modal');
+  if (modal) modal.remove();
+}
+
+function confirmCreateList() {
+  const titleInput = document.getElementById('new-list-title');
+  const descInput = document.getElementById('new-list-desc');
+  
+  const title = titleInput?.value.trim();
+  const description = descInput?.value.trim();
+  
+  if (!title) {
+    showError('Please enter a list title');
+    titleInput?.focus();
+    return;
+  }
+  
+  // Create list data
+  currentListData = {
+    title,
+    description,
+    creator: 'You',
+    isCustom: true,
+    createdAt: new Date().toISOString()
+  };
+  
+  currentImportMode = 'list';
+  
+  // Clear any existing movies
+  movies = [];
+  
+  // Update header
+  monthTitle.textContent = title;
+  movieCount.textContent = '0 films • Add movies below';
+  
+  // Show export section
+  if (exportCsvSection) exportCsvSection.style.display = 'block';
+  if (listSortOptions) listSortOptions.style.display = 'block';
+  if (attributionToggle) attributionToggle.style.display = 'none'; // No attribution for custom lists
+  
+  renderMoviesGrid();
+  renderMovieList();
+  
+  closeCreateListModal();
+  showSuccess(`Created list "${title}". Now add movies!`);
+}
+
+createListBtn?.addEventListener('click', openCreateListModal);
+
+// ============================================
+// EXPORT TO LETTERBOXD (CSV)
+// ============================================
+
+function generateLetterboxdCSV() {
+  if (movies.length === 0) {
+    showError('No movies to export');
+    return null;
+  }
+  
+  // Validate movies have required data
+  const invalidMovies = movies.filter(m => !m.title || !m.year);
+  if (invalidMovies.length > 0) {
+    console.warn('Some movies missing data:', invalidMovies);
+  }
+  
+  // CSV Header
+  let csv = 'Title,Year\n';
+  
+  // Track seen movies to avoid duplicates (unless same movie watched on different dates)
+  const seen = new Set();
+  
+  movies.forEach(movie => {
+    const key = `${movie.title}-${movie.year}`;
+    
+    // Skip duplicates for list export (Letterboxd will dedupe anyway)
+    if (seen.has(key)) return;
+    seen.add(key);
+    
+    // Escape title if it contains commas or quotes
+    let title = movie.title;
+    if (title.includes(',') || title.includes('"')) {
+      title = `"${title.replace(/"/g, '""')}"`;
+    }
+    
+    csv += `${title},${movie.year || ''}\n`;
+  });
+  
+  return csv;
+}
+
+function downloadCSV(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  URL.revokeObjectURL(url);
+}
+
+function exportToLetterboxd() {
+  const csv = generateLetterboxdCSV();
+  
+  if (!csv) return;
+  
+  // Generate filename from list title or month
+  const baseName = currentListData?.title || getSelectedMonthDisplay();
+  const filename = `${baseName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-letterboxd.csv`;
+  
+  downloadCSV(csv, filename);
+  
+  const movieCount = movies.length;
+  const uniqueCount = new Set(movies.map(m => `${m.title}-${m.year}`)).size;
+  
+  let message = `Exported ${uniqueCount} movies`;
+  if (uniqueCount < movieCount) {
+    message += ` (${movieCount - uniqueCount} duplicates removed)`;
+  }
+  
+  showSuccess(message);
+}
+
+exportCsvBtn?.addEventListener('click', exportToLetterboxd);
+
+// Show export button when movies exist
+function updateExportVisibility() {
+  if (exportCsvSection && movies.length > 0 && (currentImportMode === 'list' || currentListData)) {
+    exportCsvSection.style.display = 'block';
+  }
+}
 
 // ============================================
 // EVENT HANDLERS
