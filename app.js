@@ -949,34 +949,32 @@ completeBtn?.addEventListener('click', () => {
 downloadBtn?.addEventListener('click', downloadPNG);
 fabDownload?.addEventListener('click', downloadPNG);
 
-// Preload an image and convert to data URL
-async function preloadImageAsDataUrl(url) {
-  return new Promise((resolve, reject) => {
+// Preload an image and return data URL
+function loadImageAsDataUrl(url) {
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = img.naturalWidth || 500;
+        canvas.height = img.naturalHeight || 750;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-        resolve(dataUrl);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
       } catch (e) {
-        console.warn('Failed to convert image:', url, e);
-        resolve(url); // Fall back to original URL
+        console.warn('Canvas error for:', url, e);
+        resolve(null);
       }
     };
     
     img.onerror = () => {
-      console.warn('Failed to load image:', url);
-      resolve(url); // Fall back to original URL
+      console.warn('Failed to load:', url);
+      resolve(null);
     };
     
-    // Add cache buster to force fresh load with CORS
-    img.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+    img.src = url;
   });
 }
 
@@ -985,101 +983,114 @@ async function downloadPNG() {
   if (!btn) return;
   
   btn.disabled = true;
-  if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Preparing images...';
-  showToast('Preparing images for export...', 'success');
+  if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Preparing...';
   
   const wasCalendarView = currentView === 'calendar';
   if (wasCalendarView) {
     switchView('grid');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(r => setTimeout(r, 100));
   }
   
   try {
-    // Step 1: Convert all poster images to data URLs for reliable capture
-    const images = document.querySelectorAll('#export-area .poster-img');
-    const totalImages = images.length;
-    let loadedCount = 0;
+    showToast('Loading all movie posters...', 'success');
     
-    if (downloadBtn) downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> Loading 0/${totalImages}...`;
+    // Step 1: Preload ALL movie poster images as data URLs
+    const totalMovies = movies.length;
+    const imageDataUrls = [];
     
-    // Process images in batches to avoid overwhelming the browser
-    const batchSize = 5;
-    for (let i = 0; i < images.length; i += batchSize) {
-      const batch = Array.from(images).slice(i, i + batchSize);
+    for (let i = 0; i < movies.length; i++) {
+      const movie = movies[i];
+      if (downloadBtn) {
+        downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> ${i + 1}/${totalMovies}`;
+      }
       
-      await Promise.all(batch.map(async (img) => {
-        const originalSrc = img.src;
-        
-        // Skip if already a data URL
-        if (originalSrc.startsWith('data:')) {
-          loadedCount++;
-          return;
-        }
-        
-        try {
-          const dataUrl = await preloadImageAsDataUrl(originalSrc);
-          img.src = dataUrl;
-          loadedCount++;
-          
-          if (downloadBtn) {
-            downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> Loading ${loadedCount}/${totalImages}...`;
-          }
-        } catch (e) {
-          console.warn('Failed to preload:', originalSrc);
-          loadedCount++;
-        }
-      }));
+      const dataUrl = await loadImageAsDataUrl(movie.posterUrl);
+      imageDataUrls.push(dataUrl || movie.posterUrl);
+      
+      // Small delay between requests
+      await new Promise(r => setTimeout(r, 100));
     }
     
-    if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating PNG...';
+    if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Building...';
     
-    // Wait for browser to render the data URLs
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Step 2: Build a fresh export element with embedded images
+    const exportClone = document.createElement('div');
+    exportClone.style.cssText = `
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      background: #0c0f13;
+      padding: 40px;
+      width: 1200px;
+    `;
     
-    // Step 2: Capture with html2canvas
-    const canvas = await html2canvas(document.getElementById('export-area'), {
-      useCORS: true,
-      allowTaint: true, // Allow tainted canvas since we're using data URLs
-      backgroundColor: '#0c0f13',
-      scale: 2,
-      logging: false,
-      imageTimeout: 30000,
-      onclone: (clonedDoc) => {
-        // Ensure cloned images have correct styles
-        const clonedImages = clonedDoc.querySelectorAll('.poster-img');
-        clonedImages.forEach(img => {
-          img.style.opacity = '1';
-          img.style.visibility = 'visible';
-        });
-      }
+    // Header
+    exportClone.innerHTML = `
+      <div style="text-align: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <h1 style="font-family: 'Outfit', sans-serif; font-size: 42px; font-weight: 800; color: #f5f5f7; margin: 0 0 8px 0; letter-spacing: -1px;">${getSelectedMonthDisplay()}</h1>
+        <p style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #a1a8b3; margin: 0;">${totalMovies} film${totalMovies !== 1 ? 's' : ''} watched</p>
+      </div>
+      <div id="clone-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px;"></div>
+    `;
+    
+    document.body.appendChild(exportClone);
+    
+    const grid = exportClone.querySelector('#clone-grid');
+    
+    // Add each movie card
+    movies.forEach((movie, index) => {
+      const stars = ratingToStars(movie.rating);
+      const dateBadge = showDatesOnPosters && movie.watchedDate ? formatDateBadge(movie.watchedDate) : '';
+      const rewatchBadge = movie.watchIndex > 1 ? `x${movie.watchIndex}` : '';
+      
+      const card = document.createElement('div');
+      card.style.cssText = 'position: relative;';
+      
+      card.innerHTML = `
+        <div style="position: relative; aspect-ratio: 2/3; border-radius: 4px; overflow: hidden; background: #13171c; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
+          ${dateBadge ? `<div style="position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.85); color: #f5f5f7; font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 600; padding: 3px 6px; border-radius: 4px; z-index: 2;">${dateBadge}</div>` : ''}
+          ${rewatchBadge ? `<div style="position: absolute; top: 6px; right: 6px; background: rgba(64,188,244,0.2); border: 1px solid #40bcf4; color: #40bcf4; font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; z-index: 3;">${rewatchBadge}</div>` : ''}
+          <img src="${imageDataUrls[index]}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 6px; text-align: center; color: #00e054; font-family: 'Outfit', sans-serif; font-size: 14px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);">
+            ${stars}${movie.rewatch ? '<span style="margin-left: 4px; color: #40bcf4;">↻</span>' : ''}
+          </div>
+        </div>
+      `;
+      
+      grid.appendChild(card);
     });
     
-    // Step 3: Download
+    // Wait for inline images to render
+    await new Promise(r => setTimeout(r, 500));
+    
+    if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Capturing...';
+    
+    // Step 3: Capture the clone
+    const canvas = await html2canvas(exportClone, {
+      backgroundColor: '#0c0f13',
+      scale: 2,
+      logging: true,
+      useCORS: true,
+      allowTaint: true,
+    });
+    
+    // Clean up clone
+    document.body.removeChild(exportClone);
+    
+    // Step 4: Download
     const link = document.createElement('a');
-    const monthSlug = getSelectedMonthDisplay().replace(/\s+/g, '-');
-    link.download = `${monthSlug}-Movies.png`;
+    link.download = `${getSelectedMonthDisplay().replace(/\s+/g, '-')}-Movies.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
     
     showSuccess('PNG downloaded!');
     
-    // Step 4: Restore original image URLs (for faster subsequent loads)
-    setTimeout(() => {
-      movies.forEach((movie, index) => {
-        const img = images[index];
-        if (img && movie.posterUrl) {
-          img.src = movie.posterUrl;
-        }
-      });
-    }, 1000);
-    
   } catch (error) {
-    showError('Failed to generate PNG. Try again.');
-    console.error('html2canvas error:', error);
+    showError('Export failed. Please try again.');
+    console.error('Export error:', error);
   } finally {
     btn.disabled = false;
     if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">↓</span> Download PNG';
-    
     if (wasCalendarView) switchView('calendar');
   }
 }
