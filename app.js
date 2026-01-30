@@ -949,12 +949,44 @@ completeBtn?.addEventListener('click', () => {
 downloadBtn?.addEventListener('click', downloadPNG);
 fabDownload?.addEventListener('click', downloadPNG);
 
+// Preload an image and convert to data URL
+async function preloadImageAsDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        resolve(dataUrl);
+      } catch (e) {
+        console.warn('Failed to convert image:', url, e);
+        resolve(url); // Fall back to original URL
+      }
+    };
+    
+    img.onerror = () => {
+      console.warn('Failed to load image:', url);
+      resolve(url); // Fall back to original URL
+    };
+    
+    // Add cache buster to force fresh load with CORS
+    img.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  });
+}
+
 async function downloadPNG() {
   const btn = downloadBtn || fabDownload;
   if (!btn) return;
   
   btn.disabled = true;
-  if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating...';
+  if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Preparing images...';
+  showToast('Preparing images for export...', 'success');
   
   const wasCalendarView = currentView === 'calendar';
   if (wasCalendarView) {
@@ -963,28 +995,66 @@ async function downloadPNG() {
   }
   
   try {
-    const images = document.querySelectorAll('#export-area img');
-    await Promise.all(
-      Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-        });
-      })
-    );
+    // Step 1: Convert all poster images to data URLs for reliable capture
+    const images = document.querySelectorAll('#export-area .poster-img');
+    const totalImages = images.length;
+    let loadedCount = 0;
     
-    await new Promise(resolve => setTimeout(resolve, 200));
+    if (downloadBtn) downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> Loading 0/${totalImages}...`;
     
+    // Process images in batches to avoid overwhelming the browser
+    const batchSize = 5;
+    for (let i = 0; i < images.length; i += batchSize) {
+      const batch = Array.from(images).slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (img) => {
+        const originalSrc = img.src;
+        
+        // Skip if already a data URL
+        if (originalSrc.startsWith('data:')) {
+          loadedCount++;
+          return;
+        }
+        
+        try {
+          const dataUrl = await preloadImageAsDataUrl(originalSrc);
+          img.src = dataUrl;
+          loadedCount++;
+          
+          if (downloadBtn) {
+            downloadBtn.innerHTML = `<span class="btn-icon">⏳</span> Loading ${loadedCount}/${totalImages}...`;
+          }
+        } catch (e) {
+          console.warn('Failed to preload:', originalSrc);
+          loadedCount++;
+        }
+      }));
+    }
+    
+    if (downloadBtn) downloadBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating PNG...';
+    
+    // Wait for browser to render the data URLs
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Step 2: Capture with html2canvas
     const canvas = await html2canvas(document.getElementById('export-area'), {
       useCORS: true,
-      allowTaint: false,
+      allowTaint: true, // Allow tainted canvas since we're using data URLs
       backgroundColor: '#0c0f13',
       scale: 2,
       logging: false,
-      imageTimeout: 15000
+      imageTimeout: 30000,
+      onclone: (clonedDoc) => {
+        // Ensure cloned images have correct styles
+        const clonedImages = clonedDoc.querySelectorAll('.poster-img');
+        clonedImages.forEach(img => {
+          img.style.opacity = '1';
+          img.style.visibility = 'visible';
+        });
+      }
     });
     
+    // Step 3: Download
     const link = document.createElement('a');
     const monthSlug = getSelectedMonthDisplay().replace(/\s+/g, '-');
     link.download = `${monthSlug}-Movies.png`;
@@ -993,8 +1063,18 @@ async function downloadPNG() {
     
     showSuccess('PNG downloaded!');
     
+    // Step 4: Restore original image URLs (for faster subsequent loads)
+    setTimeout(() => {
+      movies.forEach((movie, index) => {
+        const img = images[index];
+        if (img && movie.posterUrl) {
+          img.src = movie.posterUrl;
+        }
+      });
+    }, 1000);
+    
   } catch (error) {
-    showError('Failed to generate PNG');
+    showError('Failed to generate PNG. Try again.');
     console.error('html2canvas error:', error);
   } finally {
     btn.disabled = false;
