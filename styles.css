@@ -1401,6 +1401,73 @@ body.panel-open {
   letter-spacing: 0.5px;
 }
 
+/* Custom Poster Input Section */
+.custom-poster-section {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+}
+
+.custom-poster-input-row {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.custom-poster-input-row input {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+}
+
+.custom-poster-input-row input:focus {
+  outline: none;
+  border-color: var(--accent-green);
+}
+
+.btn-small {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-small.btn-primary {
+  background: var(--accent-green);
+  color: var(--bg-dark);
+}
+
+.btn-small.btn-primary:hover {
+  background: #00c74b;
+}
+
+.btn-small.btn-danger {
+  background: transparent;
+  color: var(--accent-red);
+  border: 1px solid var(--accent-red);
+  margin-top: var(--space-sm);
+}
+
+.btn-small.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.custom-poster-error {
+  color: var(--accent-red);
+  font-size: 12px;
+  margin-top: var(--space-sm);
+  min-height: 16px;
+}
+
 .poster-picker-close {
   width: 32px;
   height: 32px;

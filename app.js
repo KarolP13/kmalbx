@@ -25,6 +25,9 @@ let movies = [];
 let isComplete = false;
 let currentView = 'grid';
 let showDatesOnPosters = true;
+let showStarRatings = true;
+let showLetterboxdAttribution = true;
+let letterboxdUsername = null; // Set when importing from Letterboxd
 let isPanelOpen = false;
 
 const MONTH_NAMES = [
@@ -74,8 +77,11 @@ const headerMovieCount = document.getElementById('header-movie-count');
 const gridViewBtn = document.getElementById('grid-view-btn');
 const calendarViewBtn = document.getElementById('calendar-view-btn');
 
-// Checkbox
+// Checkboxes
 const showDatesCheckbox = document.getElementById('show-dates-checkbox');
+const showRatingsCheckbox = document.getElementById('show-ratings-checkbox');
+const showAttributionCheckbox = document.getElementById('show-attribution-checkbox');
+const attributionToggle = document.getElementById('attribution-toggle');
 
 // FAB buttons
 const fabAdd = document.getElementById('fab-add');
@@ -311,6 +317,59 @@ function getPosterUrl(posterPath) {
 }
 
 // ============================================
+// CUSTOM POSTER VALIDATION
+// ============================================
+
+function isValidImageUrl(url) {
+  // Check for valid image extensions
+  const validExtensions = /\.(jpg|jpeg|png|webp)(\?.*)?$/i;
+  
+  // Block dangerous URLs
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('javascript:')) {
+    return false;
+  }
+  
+  // Must be http/https
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return false;
+  }
+  
+  // Check extension (allow query params after extension)
+  return validExtensions.test(url) || url.includes('image') || url.includes('poster');
+}
+
+async function validateImageUrl(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    const timeout = setTimeout(() => {
+      resolve(false);
+    }, 10000);
+    
+    img.onload = () => {
+      clearTimeout(timeout);
+      // Check aspect ratio (should be roughly 2:3 for posters, ±30% tolerance)
+      const ratio = img.naturalWidth / img.naturalHeight;
+      const isValidRatio = ratio >= 0.5 && ratio <= 0.9; // Poster-ish ratio
+      
+      if (!isValidRatio) {
+        console.warn('Image ratio may not be ideal for poster:', ratio);
+      }
+      
+      resolve(true); // Accept anyway, just warn
+    };
+    
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(false);
+    };
+    
+    img.src = url;
+  });
+}
+
+// ============================================
 // MOVIE CARD RENDERING
 // ============================================
 
@@ -320,7 +379,9 @@ function createMovieCard(movie, index) {
   card.dataset.id = movie.id;
   card.style.animationDelay = `${Math.min(index * 0.05, 0.5)}s`;
   
-  const stars = ratingToStars(movie.rating);
+  // Only show stars if rating exists AND toggle is on
+  const hasRating = movie.rating !== null && movie.rating !== undefined;
+  const stars = (showStarRatings && hasRating) ? ratingToStars(movie.rating) : '';
   const rewatchIcon = movie.rewatch ? '<span class="rewatch-icon">↻</span>' : '';
   const dateBadge = (showDatesOnPosters && movie.watchedDate) 
     ? `<div class="date-badge">${formatDateBadge(movie.watchedDate)}</div>` 
@@ -330,19 +391,26 @@ function createMovieCard(movie, index) {
     : '';
   const hasAlternatives = movie.allPosters && movie.allPosters.length > 1;
   
+  // Use custom poster if set, otherwise default
+  const displayPoster = movie.customPosterUrl || movie.posterUrl;
+  
+  // Show stars overlay only if there's content
+  const starsContent = stars || rewatchIcon;
+  const starsOverlay = starsContent ? `<div class="stars-overlay">${stars}${rewatchIcon}</div>` : '';
+  
   card.innerHTML = `
     <div class="poster-container">
       ${dateBadge}
       ${rewatchBadge}
       <img 
-        src="${movie.posterUrl}" 
+        src="${displayPoster}" 
         alt="${movie.title}"
         class="poster-img"
         crossorigin="anonymous"
         loading="lazy"
       />
-      <div class="stars-overlay">${stars}${rewatchIcon}</div>
-      ${!isComplete && hasAlternatives ? `
+      ${starsOverlay}
+      ${!isComplete ? `
         <div class="poster-picker-trigger" title="Change poster">
           <span>⚡</span>
         </div>
@@ -369,7 +437,7 @@ function openPosterPicker(movie) {
   closePosterPicker();
   
   // Normalize posters to object format
-  const posters = movie.allPosters.map(p => {
+  const posters = (movie.allPosters || []).map(p => {
     if (typeof p === 'string') {
       return { url: p, lang: 'en', isEnglish: true };
     }
@@ -379,35 +447,101 @@ function openPosterPicker(movie) {
   const englishPosters = posters.filter(p => p.isEnglish);
   const intlPosters = posters.filter(p => !p.isEnglish);
   const hasIntl = intlPosters.length > 0;
+  const currentPoster = movie.customPosterUrl || movie.posterUrl;
   
   const picker = document.createElement('div');
   picker.className = 'poster-picker-modal';
   picker.innerHTML = `
     <div class="poster-picker-content">
       <div class="poster-picker-header">
-        <h3>Choose poster</h3>
+        <h3>Choose poster for "${movie.title}"</h3>
         <button class="poster-picker-close">×</button>
       </div>
-      ${hasIntl ? `
+      
+      <!-- Custom URL Section -->
+      <div class="custom-poster-section">
+        <div class="custom-poster-input-row">
+          <input 
+            type="text" 
+            id="custom-poster-url" 
+            placeholder="Paste custom image URL (.jpg, .png, .webp)"
+            value="${movie.customPosterUrl || ''}"
+          />
+          <button id="apply-custom-poster" class="btn-small btn-primary">Apply</button>
+        </div>
+        ${movie.customPosterUrl ? `
+          <button id="remove-custom-poster" class="btn-small btn-danger">Remove custom poster</button>
+        ` : ''}
+        <p id="custom-poster-error" class="custom-poster-error"></p>
+      </div>
+      
+      ${posters.length > 0 ? `
         <div class="poster-filter-tabs">
           <button class="poster-filter-btn active" data-filter="english">
             🇺🇸 English (${englishPosters.length})
           </button>
-          <button class="poster-filter-btn" data-filter="international">
-            🌍 International (${intlPosters.length})
-          </button>
+          ${hasIntl ? `
+            <button class="poster-filter-btn" data-filter="international">
+              🌍 International (${intlPosters.length})
+            </button>
+          ` : ''}
+        </div>
+        <div class="poster-picker-grid" id="poster-grid">
+          ${renderPosterOptions(englishPosters.length > 0 ? englishPosters : intlPosters, currentPoster)}
         </div>
       ` : ''}
-      <div class="poster-picker-grid" id="poster-grid">
-        ${renderPosterOptions(englishPosters, movie.posterUrl)}
-      </div>
     </div>
   `;
   
   document.body.appendChild(picker);
   
+  // Custom poster URL handling
+  const customInput = picker.querySelector('#custom-poster-url');
+  const applyBtn = picker.querySelector('#apply-custom-poster');
+  const removeBtn = picker.querySelector('#remove-custom-poster');
+  const errorEl = picker.querySelector('#custom-poster-error');
+  
+  applyBtn?.addEventListener('click', async () => {
+    const url = customInput.value.trim();
+    if (!url) {
+      errorEl.textContent = 'Please enter a URL';
+      return;
+    }
+    
+    // Validate URL format
+    if (!isValidImageUrl(url)) {
+      errorEl.textContent = 'Invalid URL. Use .jpg, .png, or .webp images only.';
+      return;
+    }
+    
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Checking...';
+    errorEl.textContent = '';
+    
+    // Validate image loads
+    const isValid = await validateImageUrl(url);
+    
+    if (isValid) {
+      movie.customPosterUrl = url;
+      renderMoviesGrid();
+      showSuccess('Custom poster applied!');
+      closePosterPicker();
+    } else {
+      errorEl.textContent = 'Could not load image. Check the URL or try another.';
+      applyBtn.disabled = false;
+      applyBtn.textContent = 'Apply';
+    }
+  });
+  
+  removeBtn?.addEventListener('click', () => {
+    movie.customPosterUrl = null;
+    renderMoviesGrid();
+    showSuccess('Custom poster removed');
+    closePosterPicker();
+  });
+  
   // Filter tab switching
-  if (hasIntl) {
+  if (posters.length > 0) {
     picker.querySelectorAll('.poster-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         picker.querySelectorAll('.poster-filter-btn').forEach(b => b.classList.remove('active'));
@@ -416,7 +550,7 @@ function openPosterPicker(movie) {
         const filter = btn.dataset.filter;
         const grid = picker.querySelector('#poster-grid');
         const displayPosters = filter === 'english' ? englishPosters : intlPosters;
-        grid.innerHTML = renderPosterOptions(displayPosters, movie.posterUrl);
+        grid.innerHTML = renderPosterOptions(displayPosters, currentPoster);
         
         // Re-attach click handlers
         attachPosterClickHandlers(picker, movie);
@@ -1047,6 +1181,12 @@ async function importFromLetterboxd() {
     updateMovieCount();
     if (currentView === 'calendar') renderCalendarView();
     
+    // Store username for attribution and show toggle
+    letterboxdUsername = username;
+    if (attributionToggle) {
+      attributionToggle.style.display = 'block';
+    }
+    
     let message = `Imported ${successCount} movies`;
     if (failCount > 0) message += ` (${failCount} not found)`;
     showSuccess(message);
@@ -1102,6 +1242,17 @@ calendarViewBtn?.addEventListener('click', () => switchView('calendar'));
 showDatesCheckbox?.addEventListener('change', (e) => {
   showDatesOnPosters = e.target.checked;
   renderMoviesGrid();
+});
+
+// Show ratings toggle
+showRatingsCheckbox?.addEventListener('change', (e) => {
+  showStarRatings = e.target.checked;
+  renderMoviesGrid();
+});
+
+// Show attribution toggle
+showAttributionCheckbox?.addEventListener('change', (e) => {
+  showLetterboxdAttribution = e.target.checked;
 });
 
 // Add Movie
@@ -1304,10 +1455,18 @@ async function downloadPNG() {
       const batch = movies.slice(i, i + batchSize);
       
       const batchResults = await Promise.all(batch.map(async (movie) => {
-        return await loadImageAsDataUrl(movie.posterUrl);
+        // Use custom poster if set, otherwise default
+        const posterToLoad = movie.customPosterUrl || movie.posterUrl;
+        return await loadImageAsDataUrl(posterToLoad);
       }));
       
-      imageDataUrls.push(...batchResults.map((url, idx) => url || movies[i + idx].posterUrl));
+      // Fallback to default poster if custom fails
+      imageDataUrls.push(...batchResults.map((url, idx) => {
+        const movie = movies[i + idx];
+        if (url) return url;
+        // If custom poster failed, try default
+        return movie.posterUrl;
+      }));
       
       if (downloadBtn) {
         const loaded = Math.min(i + batchSize, totalMovies);
@@ -1346,26 +1505,52 @@ async function downloadPNG() {
     
     // Add each movie card
     movies.forEach((movie, index) => {
-      const stars = ratingToStars(movie.rating);
+      // Only show stars if rating exists AND toggle is on
+      const hasRating = movie.rating !== null && movie.rating !== undefined;
+      const stars = (showStarRatings && hasRating) ? ratingToStars(movie.rating) : '';
+      const rewatchIcon = movie.rewatch ? '<span style="margin-left: 4px; color: #40bcf4;">↻</span>' : '';
+      const starsContent = stars || (movie.rewatch ? rewatchIcon : '');
+      
       const dateBadge = showDatesOnPosters && movie.watchedDate ? formatDateBadge(movie.watchedDate) : '';
       const rewatchBadge = movie.watchIndex > 1 ? `x${movie.watchIndex}` : '';
       
       const card = document.createElement('div');
       card.style.cssText = 'position: relative;';
       
+      // Only show stars overlay if there's content
+      const starsOverlay = starsContent ? `
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 6px; text-align: center; color: #00e054; font-family: 'Outfit', sans-serif; font-size: ${fontSize.stars}px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);">
+          ${stars}${movie.rewatch ? '<span style="margin-left: 4px; color: #40bcf4;">↻</span>' : ''}
+        </div>
+      ` : '';
+      
       card.innerHTML = `
         <div style="position: relative; aspect-ratio: 2/3; border-radius: 4px; overflow: hidden; background: #13171c; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
           ${dateBadge ? `<div style="position: absolute; top: ${badgeSize.top}px; left: ${badgeSize.top}px; background: rgba(0,0,0,0.85); color: #f5f5f7; font-family: 'Outfit', sans-serif; font-size: ${fontSize.badge}px; font-weight: 600; padding: ${badgeSize.padding}; border-radius: 4px; z-index: 2;">${dateBadge}</div>` : ''}
           ${rewatchBadge ? `<div style="position: absolute; top: ${badgeSize.top}px; right: ${badgeSize.top}px; background: rgba(64,188,244,0.2); border: 1px solid #40bcf4; color: #40bcf4; font-family: 'Outfit', sans-serif; font-size: ${fontSize.badge}px; font-weight: 700; padding: ${badgeSize.padding}; border-radius: 4px; z-index: 3;">${rewatchBadge}</div>` : ''}
           <img src="${imageDataUrls[index]}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
-          <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 6px; text-align: center; color: #00e054; font-family: 'Outfit', sans-serif; font-size: ${fontSize.stars}px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);">
-            ${stars}${movie.rewatch ? '<span style="margin-left: 4px; color: #40bcf4;">↻</span>' : ''}
-          </div>
+          ${starsOverlay}
         </div>
       `;
       
       grid.appendChild(card);
     });
+    
+    // Add Letterboxd attribution if enabled and username exists
+    if (showLetterboxdAttribution && letterboxdUsername) {
+      const attribution = document.createElement('div');
+      attribution.style.cssText = `
+        text-align: right;
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        font-family: 'Outfit', sans-serif;
+        font-size: 12px;
+        color: rgba(255,255,255,0.5);
+      `;
+      attribution.textContent = `letterboxd.com/${letterboxdUsername}`;
+      exportClone.appendChild(attribution);
+    }
     
     // Wait for inline images to render
     await new Promise(r => setTimeout(r, totalMovies > 50 ? 800 : 500));
