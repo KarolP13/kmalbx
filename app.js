@@ -259,17 +259,22 @@ async function searchMovie(title, year = null) {
 
 async function fetchMoviePosters(movieId) {
   try {
+    // Fetch posters from all languages for maximum variety
     const response = await fetch(
-      `${TMDB_BASE_URL}/movie/${movieId}/images?api_key=${TMDB_API_KEY}`
+      `${TMDB_BASE_URL}/movie/${movieId}/images?api_key=${TMDB_API_KEY}&include_image_language=en,null,ja,ko,zh,de,fr,es,it,ru,pt`
     );
     if (!response.ok) throw new Error('Failed to fetch posters');
     const data = await response.json();
     
     if (data.posters?.length > 0) {
-      return data.posters
-        .slice(0, 12)
+      // Sort by vote count (popularity) and get up to 24 posters
+      const sortedPosters = data.posters
+        .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
+        .slice(0, 24)
         .map(p => getPosterUrl(p.file_path))
         .filter(url => url !== null);
+      
+      return sortedPosters;
     }
     return [];
   } catch (error) {
