@@ -1639,3 +1639,45 @@ body.panel-open {
   white-space: nowrap;
   border: 0;
 }
+
+/* ============================================
+   ATTRIBUTION
+   ============================================ */
+
+.attribution {
+  position: fixed;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  z-index: 50;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.attribution:hover {
+  opacity: 1;
+}
+
+.attribution a {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.attribution a:hover {
+  color: var(--accent-green);
+}
+
+/* Hide on very small screens to avoid overlap with FAB */
+@media (max-width: 480px) {
+  .attribution {
+    bottom: calc(90px + var(--safe-area-bottom));
+    font-size: 10px;
+  }
+}
