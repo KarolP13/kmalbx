@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,18 +8,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Monthly Movie Recap</title>
-  
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
   <!-- html2canvas -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  
+
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <!-- Animated Background -->
   <div class="app-bg"></div>
@@ -41,7 +45,8 @@
     <div class="header-actions">
       <button class="icon-btn" id="movie-count-btn" title="Movies added">
         <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 12H9v-2h2v2zm0-4H9V9h2v2zm4 4h-2v-2h2v2zm0-4h-2V9h2v2z"/>
+          <path
+            d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 12H9v-2h2v2zm0-4H9V9h2v2zm4 4h-2v-2h2v2zm0-4h-2V9h2v2z" />
         </svg>
         <span class="badge" id="header-movie-count">0</span>
       </button>
@@ -54,16 +59,17 @@
     <div class="view-toggle">
       <button class="view-btn active" id="grid-view-btn" title="Grid View">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="3" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="3" y="14" width="7" height="7" rx="1"/>
-          <rect x="14" y="14" width="7" height="7" rx="1"/>
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
         <span>Grid</span>
       </button>
       <button class="view-btn" id="calendar-view-btn" title="Calendar View">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+          <path
+            d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
         </svg>
         <span>Calendar</span>
       </button>
@@ -77,9 +83,19 @@
       </header>
 
       <div id="movies-grid" class="movies-grid"></div>
-      
+
       <!-- Calendar View (hidden by default) -->
       <div id="calendar-view" class="calendar-view" style="display: none;"></div>
+
+      <!-- Username Preview (shown when enabled) -->
+      <div id="username-preview" class="username-preview" style="display: none;">
+        <span class="letterboxd-dots">
+          <span class="dot green"></span>
+          <span class="dot blue"></span>
+          <span class="dot orange"></span>
+        </span>
+        <span id="username-display" class="username-text"></span>
+      </div>
     </div>
   </main>
 
@@ -87,12 +103,12 @@
   <div class="fab-container">
     <button class="fab fab-secondary" id="fab-download" title="Download PNG" style="display: none;">
       <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
       </svg>
     </button>
     <button class="fab fab-primary" id="fab-add" title="Add Movie">
       <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
       </svg>
     </button>
   </div>
@@ -103,7 +119,7 @@
   <!-- Controls Panel (Bottom Sheet on Mobile, Sidebar on Desktop) -->
   <div class="controls-panel" id="controls-panel">
     <div class="panel-handle"></div>
-    
+
     <div class="panel-header">
       <div class="logo">
         <div class="logo-icon">🎬</div>
@@ -147,7 +163,7 @@
       <!-- Manual Entry Section -->
       <div class="panel-section">
         <div class="section-label">Add Movie Manually</div>
-        
+
         <div class="control-group">
           <label for="movie-input">Movie Title</label>
           <input type="text" id="movie-input" placeholder="Search for a movie...">
@@ -197,53 +213,45 @@
       <!-- Letterboxd Import Section -->
       <div class="panel-section">
         <div class="section-label">Import from Letterboxd</div>
-        
+
         <!-- Import Mode Tabs -->
         <div class="import-mode-tabs">
           <button class="import-mode-btn active" data-mode="diary">📅 Diary</button>
           <button class="import-mode-btn" data-mode="list">📋 Lists</button>
         </div>
-        
+
         <!-- Diary Mode -->
         <div id="diary-mode" class="import-mode-content active">
           <div class="control-group">
             <label for="letterboxd-url">Username or Profile URL</label>
-            <input 
-              type="text" 
-              id="letterboxd-url" 
-              placeholder="e.g., username"
-            >
+            <input type="text" id="letterboxd-url" placeholder="e.g., username">
           </div>
-          
+
           <button id="import-diary-btn" class="btn btn-letterboxd">
             <span class="btn-icon">📥</span> Import Month's Diary
           </button>
-          
+
           <p class="helper-text">Imports watched movies for the selected month from your diary.</p>
         </div>
-        
+
         <!-- List Mode -->
         <div id="list-mode" class="import-mode-content">
           <!-- Import Section -->
           <div class="list-section">
             <div class="control-group">
               <label for="list-url">Import from Letterboxd</label>
-              <input 
-                type="text" 
-                id="list-url" 
-                placeholder="e.g., letterboxd.com/user/list/... or boxd.it/xxxxx"
-              >
+              <input type="text" id="list-url" placeholder="e.g., letterboxd.com/user/list/... or boxd.it/xxxxx">
             </div>
-            
+
             <button id="import-list-btn" class="btn btn-letterboxd">
               <span class="btn-icon">📥</span> Import List
             </button>
           </div>
-          
+
           <div class="list-divider">
             <span>or</span>
           </div>
-          
+
           <!-- Create New List Section -->
           <div class="list-section">
             <button id="create-list-btn" class="btn btn-secondary">
@@ -251,7 +259,7 @@
             </button>
             <p class="helper-text">Build a custom list and export it to Letterboxd.</p>
           </div>
-          
+
           <!-- Sort Options (shown after import/create) -->
           <div id="list-sort-options" class="control-group" style="display: none;">
             <label for="list-sort">Sort list by</label>
@@ -264,17 +272,18 @@
               <option value="alpha">Alphabetical (A–Z)</option>
             </select>
           </div>
-          
+
           <!-- Export to Letterboxd -->
           <div id="export-csv-section" style="display: none;">
             <div class="divider"></div>
             <button id="export-csv-btn" class="btn btn-primary">
               <span class="btn-icon">📤</span> Export to Letterboxd
             </button>
-            <p class="helper-text">Downloads a CSV file. Upload it to Letterboxd via: Settings → Import & Export → Import List</p>
+            <p class="helper-text">Downloads a CSV file. Upload it to Letterboxd via: Settings → Import & Export →
+              Import List</p>
           </div>
         </div>
-        
+
         <div id="import-progress" class="import-progress" style="display: none;">
           <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
@@ -288,7 +297,7 @@
       <!-- Options Section -->
       <div class="panel-section">
         <div class="section-label">Display Options</div>
-        
+
         <div class="control-group checkbox-group">
           <label class="checkbox-label">
             <input type="checkbox" id="show-dates-checkbox" checked>
@@ -296,7 +305,7 @@
             <span>Show dates on posters</span>
           </label>
         </div>
-        
+
         <div class="control-group checkbox-group">
           <label class="checkbox-label">
             <input type="checkbox" id="show-ratings-checkbox" checked>
@@ -304,12 +313,12 @@
             <span>Show star ratings</span>
           </label>
         </div>
-        
+
         <div class="control-group checkbox-group" id="attribution-toggle" style="display: none;">
           <label class="checkbox-label">
             <input type="checkbox" id="show-attribution-checkbox" checked>
             <span class="checkmark"></span>
-            <span>Show Letterboxd attribution</span>
+            <span>Show Letterboxd Username</span>
           </label>
         </div>
       </div>
@@ -344,4 +353,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

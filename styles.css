@@ -323,6 +323,46 @@ body.panel-open {
   font-weight: 500;
 }
 
+/* Username Preview (Letterboxd attribution) */
+.username-preview {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.username-preview .letterboxd-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.username-preview .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.username-preview .dot.green {
+  background: var(--accent-green);
+}
+
+.username-preview .dot.blue {
+  background: var(--accent-blue);
+}
+
+.username-preview .dot.orange {
+  background: var(--accent-orange);
+}
+
+.username-preview .username-text {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 /* ============================================
    MOVIES GRID
    ============================================ */
